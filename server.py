@@ -195,7 +195,7 @@ def run_server():
     host = '0.0.0.0' if os.environ.get('RENDER') else 'localhost'
     
     server = HTTPServer((host, port), VDB2Handler)
-    print(f"Server started at http://{host}:{port}")j
+    print(f"Server started at http://{host}:{port}")
     print(f"Files will be stored in: {os.path.abspath(Config.FILES_DIR)}")
     print(f"Cloud storage: {Config.CLOUD_STORAGE}")
     try:

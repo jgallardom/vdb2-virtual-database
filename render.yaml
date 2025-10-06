@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vdb2-virtual-database
+    env: python
+    plan: free
+    buildCommand: echo "No build command needed for Python HTTP server"
+    startCommand: python server.py
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /
+    disk:
+      name: vdb2-storage
+      mountPath: /opt/render/project/vdb2-storage
+      sizeGB: 1

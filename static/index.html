@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VDB - Virtual Database System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #f5f5f5;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .vdb-selector {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 200px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .entries-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .entry-row {
+            display: flex;
+            padding: 8px 16px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+
+        .entry-row:hover {
+            background: #f8f9fa;
+        }
+
+        .entry-cell {
+            padding: 0 8px;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            margin: 50px auto;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .button-group button.cancel {
+            background: #6c757d;
+        }
+
+        .entry-row {
+            cursor: pointer;
+        }
+
+        .entry-row:hover {
+            background: #e3f2fd;
+        }
+
+        .entry-details-modal .modal-content {
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .entry-detail-item {
+            display: flex;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .entry-detail-label {
+            font-weight: bold;
+            min-width: 150px;
+            margin-right: 15px;
+        }
+
+        .entry-detail-value {
+            flex: 1;
+            word-break: break-word;
+        }
+
+        .entry-detail-file {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .entry-detail-file:hover {
+            text-decoration: underline;
+            color: #0056b3;
+        }
+
+        .entry-detail-image {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <select id="vdbSelector" class="vdb-selector">
+            <option value="">Select a Virtual Database</option>
+        </select>
+        <div>
+            <button onclick="showNewVDBModal()">New VDB</button>
+            <button onclick="showNewEntryModal()">New Entry</button>
+        </div>
+    </div>
+
+    <div id="entriesContainer" class="entries-container"></div>
+
+    <!-- New VDB Modal -->
+    <div id="newVDBModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Virtual Database</h2>
+            <div class="form-group">
+                <label>Database Name</label>
+                <input type="text" id="vdbName">
+            </div>
+            <div id="fieldsContainer"></div>
+            <button onclick="addField()">Add Field</button>
+            <div class="button-group">
+                <button class="cancel" onclick="hideNewVDBModal()">Cancel</button>
+                <button onclick="createVDB()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Entry Modal -->
+    <div id="newEntryModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Entry</h2>
+            <div id="entryFieldsContainer"></div>
+            <div class="button-group">
+                <button class="cancel" onclick="hideNewEntryModal()">Cancel</button>
+                <button onclick="createEntry()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entry Details Modal -->
+    <div id="entryDetailsModal" class="modal entry-details-modal" onclick="hideEntryDetailsModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h2>Entry Details</h2>
+            <div id="entryDetailsContainer"></div>
+            <div class="button-group">
+                <button class="cancel" onclick="hideEntryDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentVDB = null;
+        let vdbs = [];
+
+        // Load VDBs on page load
+        async function loadVDBs() {
+            const response = await fetch('/api/vdbs');
+            vdbs = await response.json();
+            const selector = document.getElementById('vdbSelector');
+            selector.innerHTML = '<option value="">Select a Virtual Database</option>';
+            vdbs.forEach(vdb => {
+                const option = document.createElement('option');
+                option.value = vdb.id;
+                option.textContent = vdb.name;
+                selector.appendChild(option);
+            });
+        }
+
+        // Load entries for selected VDB
+        async function loadEntries(vdbId) {
+            const response = await fetch(`/api/vdbs/${vdbId}/entries`);
+            const entries = await response.json();
+            const container = document.getElementById('entriesContainer');
+            
+            // Find the current VDB
+            currentVDB = vdbs.find(vdb => vdb.id === parseInt(vdbId));
+            if (!currentVDB) return;
+            
+            // Store entries in currentVDB for easy access
+            currentVDB.entries = entries;
+
+            // Create header row
+            let html = '<div class="entry-row">';
+            currentVDB.fields.forEach(field => {
+                if (field.show_in_main_view) {
+                    html += `<div class="entry-cell"><strong>${field.name}</strong></div>`;
+                }
+            });
+            html += '</div>';
+
+            // Create entry rows
+            entries.forEach(entry => {
+                html += `<div class="entry-row" onclick="showEntryDetails(${entry.id})">`;
+                currentVDB.fields.forEach(field => {
+                    if (field.show_in_main_view) {
+                        const value = entry.values[field.name] || '';
+                        if (field.field_type === 'file' && (value.startsWith('vdb_files/') || value.startsWith('vdb_files\\'))) {
+                            // Normalize path separators for web URLs
+                            const normalizedValue = value.replace(/\\/g, '/');
+                            html += `<div class="entry-cell"><a href="${normalizedValue}" target="_blank" class="entry-detail-file" onclick="event.stopPropagation()">${normalizedValue.split('/').pop()}</a></div>`;
+                        } else {
+                            html += `<div class="entry-cell">${value}</div>`;
+                        }
+                    }
+                });
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        // VDB selector change handler
+        document.getElementById('vdbSelector').addEventListener('change', (e) => {
+            if (e.target.value) {
+                loadEntries(e.target.value);
+            } else {
+                document.getElementById('entriesContainer').innerHTML = '';
+            }
+        });
+
+        // Modal functions
+        function showNewVDBModal() {
+            document.getElementById('newVDBModal').style.display = 'block';
+            document.getElementById('fieldsContainer').innerHTML = '';
+            addField(); // Add one field by default
+        }
+
+        function hideNewVDBModal() {
+            document.getElementById('newVDBModal').style.display = 'none';
+        }
+
+        function showNewEntryModal() {
+            if (!currentVDB) {
+                alert('Please select a virtual database first');
+                return;
+            }
+            document.getElementById('newEntryModal').style.display = 'block';
+            const container = document.getElementById('entryFieldsContainer');
+            container.innerHTML = '';
+            
+            currentVDB.fields.forEach(field => {
+                const fieldGroup = document.createElement('div');
+                fieldGroup.className = 'form-group';
+                
+                const label = document.createElement('label');
+                label.textContent = field.name;
+                
+                let input;
+                switch (field.field_type) {
+                    case 'choice':
+                        input = document.createElement('select');
+                        field.options.forEach(option => {
+                            const opt = document.createElement('option');
+                            opt.value = option;
+                            opt.textContent = option;
+                            input.appendChild(opt);
+                        });
+                        break;
+                    case 'date':
+                        input = document.createElement('input');
+                        input.type = 'date';
+                        break;
+                    case 'number':
+                        input = document.createElement('input');
+                        input.type = 'number';
+                        break;
+                    case 'file':
+                        input = document.createElement('input');
+                        input.type = 'file';
+                        break;
+                    default:
+                        input = document.createElement('input');
+                        input.type = 'text';
+                }
+                
+                input.id = `field_${field.name}`;
+                fieldGroup.appendChild(label);
+                fieldGroup.appendChild(input);
+                container.appendChild(fieldGroup);
+            });
+        }
+
+        function hideNewEntryModal() {
+            document.getElementById('newEntryModal').style.display = 'none';
+        }
+
+        function showEntryDetails(entryId) {
+            if (!currentVDB) return;
+            
+            // Find the entry
+            const entry = currentVDB.entries ? currentVDB.entries.find(e => e.id === entryId) : null;
+            if (!entry) {
+                // If entry not found in currentVDB, we need to fetch it
+                fetchEntryDetails(entryId);
+                return;
+            }
+            
+            displayEntryDetails(entry);
+        }
+
+        async function fetchEntryDetails(entryId) {
+            try {
+                const response = await fetch(`/api/vdbs/${currentVDB.id}/entries`);
+                const entries = await response.json();
+                const entry = entries.find(e => e.id === entryId);
+                if (entry) {
+                    displayEntryDetails(entry);
+                }
+            } catch (error) {
+                console.error('Error fetching entry details:', error);
+                alert('Error loading entry details');
+            }
+        }
+
+        function displayEntryDetails(entry) {
+            const container = document.getElementById('entryDetailsContainer');
+            let html = '';
+            
+            // Add entry ID and creation date
+            html += `
+                <div class="entry-detail-item">
+                    <div class="entry-detail-label">Entry ID:</div>
+                    <div class="entry-detail-value">${entry.id}</div>
+                </div>
+                <div class="entry-detail-item">
+                    <div class="entry-detail-label">Created:</div>
+                    <div class="entry-detail-value">${new Date(entry.created_at).toLocaleString()}</div>
+                </div>
+            `;
+            
+            // Add all field values (including those not shown in main view)
+            currentVDB.fields.forEach(field => {
+                const value = entry.values[field.name] || '';
+                html += '<div class="entry-detail-item">';
+                html += `<div class="entry-detail-label">${field.name}:</div>`;
+                html += '<div class="entry-detail-value">';
+                
+                if (field.field_type === 'file' && (value.startsWith('vdb_files/') || value.startsWith('vdb_files\\'))) {
+                    // Normalize path separators for web URLs
+                    const normalizedValue = value.replace(/\\/g, '/');
+                    const fileName = normalizedValue.split('/').pop();
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    
+                    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(fileExtension)) {
+                        html += `<a href="${normalizedValue}" target="_blank" class="entry-detail-file" onclick="event.stopPropagation()">${fileName}</a>`;
+                        html += `<br><img src="${normalizedValue}" alt="${fileName}" class="entry-detail-image" onclick="event.stopPropagation(); window.open('${normalizedValue}', '_blank')" style="cursor: pointer;">`;
+                    } else {
+                        html += `<a href="${normalizedValue}" target="_blank" class="entry-detail-file" onclick="event.stopPropagation()">${fileName}</a>`;
+                    }
+                } else if (field.field_type === 'date' && value) {
+                    html += new Date(value).toLocaleDateString();
+                } else {
+                    html += value || '<em>No value</em>';
+                }
+                
+                html += '</div></div>';
+            });
+            
+            container.innerHTML = html;
+            document.getElementById('entryDetailsModal').style.display = 'block';
+        }
+
+        function hideEntryDetailsModal() {
+            document.getElementById('entryDetailsModal').style.display = 'none';
+        }
+
+        function addField() {
+            const container = document.getElementById('fieldsContainer');
+            const fieldDiv = document.createElement('div');
+            fieldDiv.className = 'form-group';
+            fieldDiv.innerHTML = `
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="text" placeholder="Field Name" style="flex: 1">
+                    <select style="width: 120px">
+                        <option value="string">String</option>
+                        <option value="number">Number</option>
+                        <option value="choice">Choice</option>
+                        <option value="date">Date</option>
+                        <option value="file">File</option>
+                    </select>
+                    <label style="white-space: nowrap;">
+                        <input type="checkbox" checked> Show in main
+                    </label>
+                </div>
+                <div class="options" style="display: none;">
+                    <input type="text" placeholder="Options (comma-separated)" style="width: 100%">
+                </div>
+            `;
+
+            const typeSelect = fieldDiv.querySelector('select');
+            const optionsDiv = fieldDiv.querySelector('.options');
+            typeSelect.addEventListener('change', () => {
+                optionsDiv.style.display = typeSelect.value === 'choice' ? 'block' : 'none';
+            });
+
+            container.appendChild(fieldDiv);
+        }
+
+        async function createVDB() {
+            const name = document.getElementById('vdbName').value;
+            if (!name) {
+                alert('Please enter a database name');
+                return;
+            }
+
+            const fields = [];
+            const fieldGroups = document.getElementById('fieldsContainer').children;
+            for (const group of fieldGroups) {
+                const nameInput = group.querySelector('input[type="text"]');
+                const typeSelect = group.querySelector('select');
+                const showCheckbox = group.querySelector('input[type="checkbox"]');
+                const optionsInput = group.querySelector('.options input');
+
+                if (!nameInput.value) continue;
+
+                const field = {
+                    name: nameInput.value,
+                    field_type: typeSelect.value,
+                    show_in_main_view: showCheckbox.checked,
+                    options: typeSelect.value === 'choice' ? optionsInput.value.split(',').map(o => o.trim()) : null
+                };
+                fields.push(field);
+            }
+
+            if (fields.length === 0) {
+                alert('Please add at least one field');
+                return;
+            }
+
+            const response = await fetch('/api/vdbs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name,
+                    fields
+                })
+            });
+
+            if (response.ok) {
+                hideNewVDBModal();
+                loadVDBs();
+            } else {
+                alert('Error creating virtual database');
+            }
+        }
+
+        async function createEntry() {
+            if (!currentVDB) return;
+
+            const values = {};
+            const filePromises = [];
+
+            // First collect all values and prepare file reading promises
+            currentVDB.fields.forEach(field => {
+                const input = document.getElementById(`field_${field.name}`);
+                if (field.field_type === 'file' && input.files.length > 0) {
+                    const file = input.files[0];
+                    filePromises.push(
+                        new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                values[field.name] = {
+                                    file_name: file.name,
+                                    file_data: reader.result
+                                };
+                                resolve();
+                            };
+                            reader.readAsDataURL(file);
+                        })
+                    );
+                } else {
+                    values[field.name] = input.value;
+                }
+            });
+
+            // Wait for all files to be read
+            await Promise.all(filePromises);
+
+            const response = await fetch(`/api/vdbs/${currentVDB.id}/entries`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    vdb_id: currentVDB.id,
+                    values
+                })
+            });
+
+            if (response.ok) {
+                hideNewEntryModal();
+                loadEntries(currentVDB.id);
+            } else {
+                alert('Error creating entry');
+            }
+        }
+
+        // Initialize
+        loadVDBs();
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# VDB2 - Virtual Database System Requirements
+# Python HTTP Server for Render deployment
+
+# Core dependencies
+# Note: http.server is part of Python standard library, no additional packages needed
+# The app uses only built-in Python modules for maximum compatibility
+
+# Optional: Add any future dependencies here
+# Example:
+# flask==2.3.3
+# gunicorn==21.2.0
